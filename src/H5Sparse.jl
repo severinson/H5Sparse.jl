@@ -1,3 +1,7 @@
+"""
+
+Support for out-of-core sparse arrays backed by a HDF5 file stored on disk. Provides `H5SparseMatrixCSC`.
+"""
 module H5Sparse
 
 using HDF5, SparseArrays
@@ -24,6 +28,10 @@ A = H5SparseMatrixCSC(fid, "A", B)
 C = sprand(10, 10, 0.5)
 A = H5SparseMatrixCSC("foo.h5", "A", C, overwrite=true) # Overwrites any existing dataset with name A
 
+# Construct from an existing file
+A = H5SparseMatrixCSC("foo.h5", "A")
+A = H5SparseMatrixCSC(fid, "A")
+
 # Append a SparseMatrixCSC to the right; useful for constructing large matrices in an iterative fashion
 D = sprand(10, 5, 0.5)
 append!(A, D)       # A is now of size (10, 15)
@@ -32,7 +40,7 @@ append!(A, D)       # A is now of size (10, 15)
 sparse(A)           # SparseMatrixCSC
 Matrix(A)           # Matrix
 
-# Reading querying columns, or blocks of columns, is fast, quering rows is slow
+# Querying columns, or blocks of columns, is fast, but quering rows is slow
 @time A[:, 1];      # 0.000197 seconds (77 allocations: 3.844 KiB)
 @time A[:, 1:10];   # 0.000192 seconds (71 allocations: 4.234 KiB)
 @time A[1, :];      # 0.001479 seconds (1.35 k allocations: 69.109 KiB)
@@ -42,7 +50,7 @@ Matrix(A)           # Matrix
 struct H5SparseMatrixCSC{Tv, Ti<:Integer} <: SparseArrays.AbstractSparseMatrixCSC{Tv, Ti}
     fid::HDF5.File  # Backing HDF5 file
     name::String    # Dataset name, i.e., data is stored in fid[name]
-    function H5SparseMatrixCSC{Tv,Ti}(fid::HDF5.File, name::AbstractString) where {Tv,Ti<:Integer}
+    function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString) where {Tv,Ti<:Integer}
         name in keys(fid) || throw(ArgumentError("$name is not in $fid"))
         g = fid[name]
         "m" in keys(g) || throw(ArgumentError("m is not in $g"))
@@ -50,13 +58,15 @@ struct H5SparseMatrixCSC{Tv, Ti<:Integer} <: SparseArrays.AbstractSparseMatrixCS
         "colptr" in keys(g) || throw(ArgumentError("colptr is not in $g"))
         "rowval" in keys(g) || throw(ArgumentError("rowval is not in $g"))
         "nzval" in keys(g) || throw(ArgumentError("nzval is not in $g"))
-        new{Tv,Ti}(fid, String(name))
+        eltype(g["colptr"]) == eltype(g["rowval"]) || throw(ArgumentError("colptr has eltype $(g["colptr"])), but rowval has eltype $(g["rowval"]))"))
+        new{eltype(g["nzval"]),eltype(g["rowval"])}(fid, String(name))
     end
 end
+H5SparseMatrixCSC(filename::AbstractString, name::AbstractString) = H5SparseMatrixCSC(h5open(filename, "cw"), name)
 H5SparseMatrixCSC(filename::AbstractString, name::AbstractString, B::SparseMatrixCSC; kwargs...) = H5SparseMatrixCSC(h5open(filename, "cw"), name, B; kwargs...)
-function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString, B::SparseMatrixCSC{Tv,Ti}; kwargs...) where {Tv,Ti}
+function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString, B::SparseMatrixCSC; kwargs...)
     h5writecsc(fid, name, B; kwargs...)
-    H5SparseMatrixCSC{Tv,Ti}(fid, name)
+    H5SparseMatrixCSC(fid, name)
 end
 
 function Base.show(io::IO, A::H5SparseMatrixCSC{Tv,Ti}) where {Tv,Ti}
