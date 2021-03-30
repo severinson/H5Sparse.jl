@@ -29,7 +29,7 @@ append!(A, D)       # A is now of size (10, 15)
 sparse(A)           # SparseMatrixCSC
 Matrix(A)           # Matrix
 
-# Querying columns, or blocks of columns, is fast, but quering rows is slow
+# Querying columns, or blocks of columns, is fast, but querying rows is slow
 @time A[:, 1];      # 0.000197 seconds (77 allocations: 3.844 KiB)
 @time A[:, 1:10];   # 0.000192 seconds (71 allocations: 4.234 KiB)
 @time A[1, :];      # 0.001479 seconds (1.35 k allocations: 69.109 KiB)
