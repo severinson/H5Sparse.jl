@@ -1,4 +1,4 @@
-# H5Sparse
+# H5Sparse.jl
 
 This package provides `H5SparseMatrixCSC`, an an out-of-core `AbstractSparseMatrixCSC` backed by a HDF5 dataset stored on disk. The main purpose of this package is to provide support for iteratively constructing large sparse matrices that do not fit in memory and for querying a subset of the columns of that matrix.
 
