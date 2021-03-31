@@ -14,23 +14,28 @@ fid = h5open("foo.h5", "cw")
 A = H5SparseMatrixCSC(fid, "A", B)
 
 # kwargs are passed on to h5writecsc
-C = sprand(10, 10, 0.5)
-A = H5SparseMatrixCSC("foo.h5", "A", C, overwrite=true) # Overwrites any existing dataset with name A
+A = H5SparseMatrixCSC("foo.h5", "A", B, overwrite=true) # Overwrites any existing dataset with name A
 
 # Construct from an existing file
 A = H5SparseMatrixCSC("foo.h5", "A")
 A = H5SparseMatrixCSC(fid, "A")
 
-# Append a SparseMatrixCSC to the right; useful for constructing large matrices in an iterative fashion
-D = sprand(10, 5, 0.5)
-append!(A, D)       # A is now of size (10, 15)
+# Construct a view into a subset of the rows and/or columns stored in a file
+A = H5SparseMatrixCSC("foo.h5", "A", :, 2:5)
 
-# Reading the entire matrix from disk
+# Colon or UnitRange indexing returns a new H5SparseMatrixCSC that is a view into the specified subset of rows and/or columns
+A[:, 1:10]
+A[1:4, :]
+
+# Integer indexing returns the requested element
+A[1, 1]
+
+# Concatenate with a SparseMatrixCSC to the right; useful for constructing large matrices in an iterative fashion
+# Returns a new H5SparseMatrixCSC spanning all columns of the resulting matrix
+C = sprand(10, 5, 0.5)
+A = hcat(A, C)      # A is now of size (10, 15)
+
+# Use sparse or Matrix to load H5SparseMatrixCSC matrix into memory
 sparse(A)           # SparseMatrixCSC
 Matrix(A)           # Matrix
-
-# Querying columns, or blocks of columns, is fast, but querying rows is slow
-@time A[:, 1];      # 0.000197 seconds (77 allocations: 3.844 KiB)
-@time A[:, 1:10];   # 0.000192 seconds (71 allocations: 4.234 KiB)
-@time A[1, :];      # 0.001479 seconds (1.35 k allocations: 69.109 KiB)
 ```

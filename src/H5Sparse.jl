@@ -6,7 +6,7 @@ module H5Sparse
 
 using HDF5, SparseArrays
 
-export H5SparseMatrixCSC
+export H5SparseVector, H5SparseMatrixCSC
 
 """
     H5SparseMatrixCSC{Tv, Ti<:Integer} <: SparseArrays.AbstractSparseMatrixCSC{Tv, Ti}
@@ -25,32 +25,39 @@ fid = h5open("foo.h5", "cw")
 A = H5SparseMatrixCSC(fid, "A", B)
 
 # kwargs are passed on to h5writecsc
-C = sprand(10, 10, 0.5)
-A = H5SparseMatrixCSC("foo.h5", "A", C, overwrite=true) # Overwrites any existing dataset with name A
+A = H5SparseMatrixCSC("foo.h5", "A", B, overwrite=true) # Overwrites any existing dataset with name A
 
 # Construct from an existing file
 A = H5SparseMatrixCSC("foo.h5", "A")
 A = H5SparseMatrixCSC(fid, "A")
 
-# Append a SparseMatrixCSC to the right; useful for constructing large matrices in an iterative fashion
-D = sprand(10, 5, 0.5)
-append!(A, D)       # A is now of size (10, 15)
+# Construct a view into a subset of the rows and/or columns stored in a file
+A = H5SparseMatrixCSC("foo.h5", "A", :, 2:5)
 
-# Reading the entire matrix from disk
+# Colon or UnitRange indexing returns a new H5SparseMatrixCSC that is a view into the specified subset of rows and/or columns
+A[:, 1:10]
+A[1:4, :]
+
+# Integer indexing returns the requested element
+A[1, 1]
+
+# Concatenate with a SparseMatrixCSC to the right; useful for constructing large matrices in an iterative fashion
+# Returns a new H5SparseMatrixCSC spanning all columns of the resulting matrix
+C = sprand(10, 5, 0.5)
+A = hcat(A, C)      # A is now of size (10, 15)
+
+# Use sparse or Matrix to load H5SparseMatrixCSC matrix into memory
 sparse(A)           # SparseMatrixCSC
 Matrix(A)           # Matrix
-
-# Querying columns, or blocks of columns, is fast, but querying rows is slow
-@time A[:, 1];      # 0.000197 seconds (77 allocations: 3.844 KiB)
-@time A[:, 1:10];   # 0.000192 seconds (71 allocations: 4.234 KiB)
-@time A[1, :];      # 0.001479 seconds (1.35 k allocations: 69.109 KiB)
 ```
 
 """
 struct H5SparseMatrixCSC{Tv, Ti<:Integer} <: SparseArrays.AbstractSparseMatrixCSC{Tv, Ti}
-    fid::HDF5.File  # Backing HDF5 file
-    name::String    # Dataset name, i.e., data is stored in fid[name]
-    function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString) where {Tv,Ti<:Integer}
+    fid::HDF5.File          # Backing HDF5 file
+    name::String            # Dataset name, i.e., data is stored in fid[name]
+    rows::UnitRange{Int}    # Subset of rows stored in fid[name] accessible via this instance
+    cols::UnitRange{Int}    # Subset of columns stored in fid[name] accessible via this instance
+    function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString, rows::UnitRange{Int}, cols::UnitRange{Int}) where {Tv,Ti<:Integer}
         name in keys(fid) || throw(ArgumentError("$name is not in $fid"))
         g = fid[name]
         "m" in keys(g) || throw(ArgumentError("m is not in $g"))
@@ -59,30 +66,47 @@ struct H5SparseMatrixCSC{Tv, Ti<:Integer} <: SparseArrays.AbstractSparseMatrixCS
         "rowval" in keys(g) || throw(ArgumentError("rowval is not in $g"))
         "nzval" in keys(g) || throw(ArgumentError("nzval is not in $g"))
         eltype(g["colptr"]) == eltype(g["rowval"]) || throw(ArgumentError("colptr has eltype $(g["colptr"])), but rowval has eltype $(g["rowval"]))"))
-        new{eltype(g["nzval"]),eltype(g["rowval"])}(fid, String(name))
+        m, n = g["m"][], g["n"][]
+        0 < first(rows) <= m || throw(ArgumentError("first row is $(first(rows)), but m is $m"))
+        0 < last(rows) <= m || throw(ArgumentError("last row is $(last(rows)), but m is $m"))
+        first(rows) <= last(rows) || throw(ArgumentError("first row is $(first(rows)), but last row is $(last(rows))"))
+        0 < first(cols) <= n || throw(ArgumentError("first column is $(first(cols)), but n is $n"))
+        0 < last(cols) <= n || throw(ArgumentError("last column is $(last(cols)), but n is $n"))
+        first(cols) <= last(cols) || throw(ArgumentError("first columns is $(first(cols)), but last column is $(last(cols))"))
+        new{eltype(g["nzval"]),eltype(g["rowval"])}(fid, String(name), rows, cols)
     end
 end
-H5SparseMatrixCSC(filename::AbstractString, name::AbstractString) = H5SparseMatrixCSC(h5open(filename, "cw"), name)
-H5SparseMatrixCSC(filename::AbstractString, name::AbstractString, B::SparseMatrixCSC; kwargs...) = H5SparseMatrixCSC(h5open(filename, "cw"), name, B; kwargs...)
+H5SparseMatrixCSC(filename::AbstractString, args...; kwargs...) = H5SparseMatrixCSC(h5open(filename, "cw"), args...; kwargs...)
 function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString, B::SparseMatrixCSC; kwargs...)
     h5writecsc(fid, name, B; kwargs...)
-    H5SparseMatrixCSC(fid, name)
+    H5SparseMatrixCSC(fid, name, 1:size(B, 1), 1:size(B, 2))
 end
+function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString)
+    m, n = h5size(fid, name)
+    H5SparseMatrixCSC(fid, name, 1:m, 1:n)
+end
+function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString, ::Colon, cols)
+    m, n = h5size(fid, name)
+    H5SparseMatrixCSC(fid, name, 1:m, cols)
+end
+function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString, rows, ::Colon)
+    m, n = h5size(fid, name)
+    H5SparseMatrixCSC(fid, name, rows, 1:n)
+end
+H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString, ::Colon, ::Colon) = H5SparseMatrixCSC(fid, name)
+
+Base.show(io::IOContext, A::H5SparseMatrixCSC) = show(io.io, A)
 
 function Base.show(io::IO, A::H5SparseMatrixCSC{Tv,Ti}) where {Tv,Ti}
-    print(io, "H5SparseMatrixCSC{$Tv,$Ti}($(A.fid.filename), $(A.name))")
+    print(io, "H5SparseMatrixCSC{$Tv,$Ti}($(A.fid.filename), $(A.name), $(A.rows), $(A.cols))")
 end
 
 function Base.display(A::H5SparseMatrixCSC)    
     show(stdout, A)
 end
 
-SparseArrays.getcolptr(A::H5SparseMatrixCSC) = A.fid[A.name]["colptr"]
-SparseArrays.rowvals(A::H5SparseMatrixCSC) = A.fid[A.name]["rowval"]
-SparseArrays.nonzeros(A::H5SparseMatrixCSC) = A.fid[A.name]["nzval"]
-
-Base.size(A::H5SparseMatrixCSC) = h5size(A.fid, A.name)
-function Base.eltype(A::H5SparseMatrixCSC{Tv}) where Tv
+Base.size(A::H5SparseMatrixCSC) = (last(A.rows)-first(A.rows)+1, last(A.cols)-first(A.cols)+1)
+function Base.eltype(::H5SparseMatrixCSC{Tv}) where Tv
     Tv
 end
 
@@ -92,6 +116,7 @@ struct H5View{Tv} <: AbstractVector{Tv}
     j::Int          # Upper index
 end
 H5View(x::HDF5.Dataset, i::Integer, j::Integer) = H5View{eltype(x)}(x, i, j)
+H5View(x::HDF5.Dataset) = H5View(x, 1, length(x))
 
 function Base.show(io::IO, a::H5View{Tv}) where Tv
     print(io, "H5View{$Tv}($(a.x), $(x.i), $(x.j))")
@@ -111,11 +136,17 @@ function Base.getindex(a::H5View{Tv}, k::Integer)::Tv where Tv
     a.x[a.i+k-1]
 end
 
+SparseArrays.getcolptr(A::H5SparseMatrixCSC) = H5View(A.fid[A.name]["colptr"])
+SparseArrays.rowvals(A::H5SparseMatrixCSC) = H5View(A.fid[A.name]["rowval"])
+SparseArrays.nonzeros(A::H5SparseMatrixCSC) = H5View(A.fid[A.name]["nzval"])
+
 function Base.getindex(A::H5SparseMatrixCSC{Tv}, row::Integer, col::Integer)::Tv where Tv
     m, n = size(A)    
-    @boundscheck 0 < row <= m || throw(BoundsError(A, row))
-    @boundscheck 0 < col <= n || throw(BoundsError(A, col))
-    g = A.fid[A.name]    
+    @boundscheck 0 < row <= m || throw(BoundsError(A, (row, col)))
+    @boundscheck 0 < col <= n || throw(BoundsError(A, (row, col)))
+    row = first(A.rows) + row - 1
+    col = first(A.cols) + col - 1
+    g = A.fid[A.name]
     i = g["colptr"][col]
     j = g["colptr"][col+1] - 1
     v = H5View(g["rowval"], i, j)
@@ -127,50 +158,22 @@ function Base.getindex(A::H5SparseMatrixCSC{Tv}, row::Integer, col::Integer)::Tv
     end
 end
 
-function Base.getindex(A::H5SparseMatrixCSC{Tv,Ti}, row::Integer, ::Colon)::SparseVector{Tv,Ti} where {Tv,Ti}
-    m, n = size(A)    
-    @boundscheck 0 < row <= m || throw(BoundsError(A, row))
-    nzind = zeros(Ti, 0)
-    nzval = zeros(Tv, 0)
-    for col in 1:n
-        v = A[row, col]
-        if !iszero(v)
-            push!(nzind, Ti(col))
-            push!(nzval, v)
-        end
-    end
-    SparseVector{Tv,Ti}(n, nzind, nzval)
+Base.getindex(A::H5SparseMatrixCSC, ::Colon, cols::UnitRange{<:Integer}) = getindex(A, 1:size(A, 1), cols)
+Base.getindex(A::H5SparseMatrixCSC, rows::UnitRange{<:Integer}, ::Colon) = getindex(A, rows, 1:size(A, 2))
+Base.getindex(A::H5SparseMatrixCSC, ::Colon, ::Colon) = getindex(A, 1:size(A, 1), 1:size(A, 2))
+function Base.getindex(A::H5SparseMatrixCSC{Tv,Ti}, rows::UnitRange{<:Integer}, cols::UnitRange{<:Integer})::H5SparseMatrixCSC{Tv,Ti} where {Tv,Ti}
+    m, n = size(A)  
+    @boundscheck 0 < first(rows) <= m || throw(BoundsError(A, (rows, cols)))
+    @boundscheck 0 < last(rows) <= m || throw(BoundsError(A, (rows, cols)))
+    @boundscheck first(rows) <= last(rows) || throw(ArgumentError("first row is $(first(rows)), but last row is $(last(rows))"))        
+    @boundscheck 0 < first(cols) <= n || throw(BoundsError(A, (rows, cols)))
+    @boundscheck 0 < last(cols) <= n || throw(BoundsError(A, (rows, cols)))
+    @boundscheck first(cols) <= last(cols) || throw(ArgumentError("first column is $(first(cols)), but last column is $(last(cols))"))
+    H5SparseMatrixCSC(A.fid, A.name, (first(A.rows)+first(rows)-1):(first(A.rows)+last(rows)-1), (first(A.cols)+first(cols)-1):(first(A.cols)+last(cols)-1))
 end
 
-function Base.getindex(A::H5SparseMatrixCSC{Tv,Ti}, ::Colon, col::Integer)::SparseVector{Tv,Ti} where {Tv,Ti}
-    m, n = size(A)
-    @boundscheck 0 < col <= n || throw(BoundsError(A, col))
-    g = A.fid[A.name]    
-    i = g["colptr"][col]
-    j = g["colptr"][col+1] - 1
-    rowval = g["rowval"][i:j]
-    nzval = g["nzval"][i:j]
-    SparseVector{Tv,Ti}(m, rowval, nzval)
-end
-
-"""
-
-Read the submatrix consisting of columns `firstcol:lastcol` from `fid[name]`.
-"""
-function Base.getindex(A::H5SparseMatrixCSC{Tv,Ti}, ::Colon, cols::UnitRange{<:Integer})::SparseMatrixCSC{Tv,Ti} where {Tv,Ti}
-    m, n = size(A)
-    firstcol, lastcol = first(cols), last(cols)    
-    @boundscheck 0 < firstcol <= n || throw(BoundsError(A, firstcol))
-    @boundscheck 0 < lastcol <= n || throw(BoundsError(A, lastcol))
-    @boundscheck firstcol <= lastcol <= n || throw(ArgumentError("first column is $firstcol, but last column is $lastcol"))
-    g = A.fid[A.name]
-    colptr = g["colptr"][firstcol:lastcol+1]
-    i = colptr[1]
-    j = colptr[end] - 1
-    rowval = g["rowval"][i:j]     
-    nzval = g["nzval"][i:j]
-    colptr .-= i-1
-    SparseMatrixCSC{Tv,Ti}(m, lastcol-firstcol+1, colptr, rowval, nzval)
+function Base.setindex!(::H5SparseMatrixCSC, ::Any, ::Integer, ::Integer)
+    error("H5SparseMatrixCSC data is immutable")
 end
 
 """
@@ -178,19 +181,29 @@ end
 
 Appends `B` to the right of `A`.
 """
-function Base.append!(A::H5SparseMatrixCSC{Tv,Ti}, B::SparseMatrixCSC{Tv,Ti}) where {Tv,Ti}    
-    size(A, 1) == size(B, 1) || throw(DimensionMismatch("A has dimensions $(size(A)), but B has dimensions $(size(B))"))
-    h5appendcsc(A.fid, A.name, B)
-    A
+function Base.hcat(A::H5SparseMatrixCSC{Tv,Ti}, Bs::SparseMatrixCSC{Tv,Ti}...) where {Tv,Ti}
+    ncols = 0
+    for B in Bs
+        size(A, 1) == size(B, 1) || throw(DimensionMismatch("A has dimensions $(size(A)), but B has dimensions $(size(B))"))
+        h5appendcsc(A.fid, A.name, B)
+        ncols += size(B, 2)
+    end
+    H5SparseMatrixCSC(A.fid, A.name, A.rows, first(A.cols):(last(A.cols)+ncols))
 end
 
 function SparseArrays.sparse(A::H5SparseMatrixCSC{Tv,Ti})::SparseMatrixCSC{Tv,Ti} where {Tv,Ti}
-    m, n = size(A)    
+    m, n = size(A)
+    if m != h5size(A.fid, A.name)[1]
+        error("not implemented")
+    end
     g = A.fid[A.name]
-    colptr = g["colptr"][:]    
-    rowval = g["rowval"][:]    
-    nzval = g["nzval"][:]
-    SparseMatrixCSC(m, n, colptr, rowval, nzval)
+    colptr = g["colptr"][first(A.cols):(last(A.cols)+1)]
+    i = colptr[1]
+    j = colptr[end] - 1
+    rowval = g["rowval"][i:j]
+    nzval = g["nzval"][i:j]
+    colptr .-= i-1
+    SparseMatrixCSC{Tv,Ti}(m, n, colptr, rowval, nzval)
 end
 
 function h5size(fid::HDF5.File, name::AbstractString)
