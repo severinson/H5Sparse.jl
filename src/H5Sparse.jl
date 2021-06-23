@@ -65,6 +65,9 @@ struct H5SparseMatrixCSC{Tv, Ti<:Integer} <: SparseArrays.AbstractSparseMatrixCS
         "colptr" in keys(g) || throw(ArgumentError("colptr is not in $g"))
         "rowval" in keys(g) || throw(ArgumentError("rowval is not in $g"))
         "nzval" in keys(g) || throw(ArgumentError("nzval is not in $g"))
+        length(size(g["colptr"])) == 1 || return false
+        length(size(g["rowval"])) == 1 || return false
+        length(size(g["nzval"])) == 1 || return false        
         eltype(g["colptr"]) == eltype(g["rowval"]) || throw(ArgumentError("colptr has eltype $(g["colptr"])), but rowval has eltype $(g["rowval"]))"))
         m, n = g["m"][], g["n"][]
         0 < first(rows) <= m || throw(ArgumentError("first row is $(first(rows)), but m is $m"))
@@ -293,6 +296,37 @@ function h5appendcsc(fid::HDF5.File, name::AbstractString, m::Integer, n::Intege
     delete_object(g, "n")
     g["n"] = old_n + n
     return
+end
+
+"""
+
+Return `true` if `fid[name]` is a valid `H5SparseMatrixCSC` dataset, and `false` otherwise.
+"""
+function h5isvalidcsc(fid::HDF5.File, name::AbstractString)
+    name in keys(fid) || return false
+    g = fid[name]
+    "m" in keys(g) || return false
+    "n" in keys(g) || return false
+    "colptr" in keys(g) || return false
+    "rowval" in keys(g) || return false
+    "nzval" in keys(g) || return false
+    length(size(g["colptr"])) == 1 || return false
+    length(size(g["rowval"])) == 1 || return false
+    length(size(g["nzval"])) == 1 || return false
+    eltype(g["colptr"]) == eltype(g["rowval"]) || return false
+    true
+end
+
+"""
+
+Return `true` if `h5open(filename)[name]` is a valid `H5SparseMatrixCSC` dataset, and `false` 
+otherwise.
+"""
+function h5isvalidcsc(filename::AbstractString, name::AbstractString)
+    HDF5.ishdf5(filename) || return false
+    h5open(filename) do fid
+        return h5isvalidcsc(fid, name)
+    end
 end
 
 end

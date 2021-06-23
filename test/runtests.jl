@@ -63,4 +63,11 @@ using HDF5, SparseArrays
     @test sparse(A) ≈ hcat(B, C, D)
     A = hcat(A, C, D)
     @test sparse(A) ≈ hcat(B, C, D, C, D)
+
+    # h5isvalidcsc
+    @test H5Sparse.h5isvalidcsc(fid, name)
+    @test H5Sparse.h5isvalidcsc(filename, name)
+    delete_object(fid[name], "m")
+    @test !H5Sparse.h5isvalidcsc(fid, name)
+
 end
