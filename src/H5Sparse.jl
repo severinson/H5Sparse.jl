@@ -60,6 +60,7 @@ struct H5SparseMatrixCSC{Tv, Ti<:Integer} <: SparseArrays.AbstractSparseMatrixCS
     function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString, rows::UnitRange{Int}, cols::UnitRange{Int}) where {Tv,Ti<:Integer}
         name in keys(fid) || throw(ArgumentError("$name is not in $fid"))
         g = fid[name]
+        g isa HDF5.Group || throw(ArgumentError("fid[name] is $g, but must be a HDF5.Group"))
         "m" in keys(g) || throw(ArgumentError("m is not in $g"))
         "n" in keys(g) || throw(ArgumentError("n is not in $g"))
         "colptr" in keys(g) || throw(ArgumentError("colptr is not in $g"))
@@ -305,6 +306,7 @@ Return `true` if `fid[name]` is a valid `H5SparseMatrixCSC` dataset, and `false`
 function h5isvalidcsc(fid::HDF5.File, name::AbstractString)
     name in keys(fid) || return false
     g = fid[name]
+    g isa HDF5.Group || return false
     "m" in keys(g) || return false
     "n" in keys(g) || return false
     "colptr" in keys(g) || return false

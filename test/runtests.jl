@@ -69,5 +69,6 @@ using HDF5, SparseArrays
     @test H5Sparse.h5isvalidcsc(filename, name)
     delete_object(fid[name], "m")
     @test !H5Sparse.h5isvalidcsc(fid, name)
-
+    fid["foo"] = 10
+    @test !H5Sparse.h5isvalidcsc(fid, "foo")
 end
