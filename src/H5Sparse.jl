@@ -6,7 +6,7 @@ module H5Sparse
 
 using HDF5, SparseArrays
 
-export H5SparseVector, H5SparseMatrixCSC
+export H5SparseMatrixCSC
 
 """
     H5SparseMatrixCSC{Tv, Ti<:Integer, Td<:HDF5.H5DataStore} <: SparseArrays.AbstractSparseMatrixCSC{Tv, Ti}
