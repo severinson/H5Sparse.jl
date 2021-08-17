@@ -9,9 +9,9 @@ using HDF5, SparseArrays
 export H5SparseVector, H5SparseMatrixCSC
 
 """
-    H5SparseMatrixCSC{Tv, Ti<:Integer} <: SparseArrays.AbstractSparseMatrixCSC{Tv, Ti}
+    H5SparseMatrixCSC{Tv, Ti<:Integer, Td<:HDF5.H5DataStore} <: SparseArrays.AbstractSparseMatrixCSC{Tv, Ti}
 
-Out-of-core `AbstractSparseMatrixCSC` backed by a HDF5 dataset stored on disk.
+Out-of-core `AbstractSparseMatrixCSC` backed by a dataset stored on disk, of type `Td<:HDF5.H5DataStore`, e.g., a HDF5 file.
 
 ```julia
 # Conversion from SparseMatrixCSC; writes B to a dataset "A" in the file "foo.h5"
@@ -54,7 +54,7 @@ Matrix(A)           # Matrix
 """
 
 struct H5SparseMatrixCSC{Tv, Ti<:Integer, Td<:HDF5.H5DataStore} <: SparseArrays.AbstractSparseMatrixCSC{Tv, Ti}
-    fid::Td                 # Backing HDF5 file
+    fid::Td                 # Backing storage
     name::String            # Dataset name, i.e., data is stored in fid[name]
     rows::UnitRange{Int}    # Subset of rows stored in fid[name] accessible via this instance
     cols::UnitRange{Int}    # Subset of columns stored in fid[name] accessible via this instance
