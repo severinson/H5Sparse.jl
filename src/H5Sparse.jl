@@ -52,12 +52,13 @@ Matrix(A)           # Matrix
 ```
 
 """
-struct H5SparseMatrixCSC{Tv, Ti<:Integer} <: SparseArrays.AbstractSparseMatrixCSC{Tv, Ti}
-    fid::HDF5.File          # Backing HDF5 file
+
+struct H5SparseMatrixCSC{Tv, Ti<:Integer, Td<:HDF5.H5DataStore} <: SparseArrays.AbstractSparseMatrixCSC{Tv, Ti}
+    fid::Td                 # Backing HDF5 file
     name::String            # Dataset name, i.e., data is stored in fid[name]
     rows::UnitRange{Int}    # Subset of rows stored in fid[name] accessible via this instance
     cols::UnitRange{Int}    # Subset of columns stored in fid[name] accessible via this instance
-    function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString, rows::UnitRange{Int}, cols::UnitRange{Int}) where {Tv,Ti<:Integer}
+    function H5SparseMatrixCSC(fid::HDF5.H5DataStore, name::AbstractString, rows::UnitRange{Int}, cols::UnitRange{Int}) where {Tv,Ti<:Integer}
         name in keys(fid) || throw(ArgumentError("$name is not in $fid"))
         g = fid[name]
         g isa HDF5.Group || throw(ArgumentError("fid[name] is $g, but must be a HDF5.Group"))
@@ -77,27 +78,27 @@ struct H5SparseMatrixCSC{Tv, Ti<:Integer} <: SparseArrays.AbstractSparseMatrixCS
         0 < first(cols) <= n || throw(ArgumentError("first column is $(first(cols)), but n is $n"))
         0 < last(cols) <= n || throw(ArgumentError("last column is $(last(cols)), but n is $n"))
         first(cols) <= last(cols) || throw(ArgumentError("first columns is $(first(cols)), but last column is $(last(cols))"))
-        new{eltype(g["nzval"]),eltype(g["rowval"])}(fid, String(name), rows, cols)
+        new{eltype(g["nzval"]),eltype(g["rowval"]),typeof(fid)}(fid, String(name), rows, cols)
     end
 end
 H5SparseMatrixCSC(filename::AbstractString, args...; kwargs...) = H5SparseMatrixCSC(h5open(filename, "cw"), args...; kwargs...)
-function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString, B::SparseMatrixCSC; kwargs...)
+function H5SparseMatrixCSC(fid::HDF5.H5DataStore, name::AbstractString, B::SparseMatrixCSC; kwargs...)
     h5writecsc(fid, name, B; kwargs...)
     H5SparseMatrixCSC(fid, name, 1:size(B, 1), 1:size(B, 2))
 end
-function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString)
+function H5SparseMatrixCSC(fid::HDF5.H5DataStore, name::AbstractString)
     m, n = h5size(fid, name)
     H5SparseMatrixCSC(fid, name, 1:m, 1:n)
 end
-function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString, ::Colon, cols)
+function H5SparseMatrixCSC(fid::HDF5.H5DataStore, name::AbstractString, ::Colon, cols)
     m, n = h5size(fid, name)
     H5SparseMatrixCSC(fid, name, 1:m, cols)
 end
-function H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString, rows, ::Colon)
+function H5SparseMatrixCSC(fid::HDF5.H5DataStore, name::AbstractString, rows, ::Colon)
     m, n = h5size(fid, name)
     H5SparseMatrixCSC(fid, name, rows, 1:n)
 end
-H5SparseMatrixCSC(fid::HDF5.File, name::AbstractString, ::Colon, ::Colon) = H5SparseMatrixCSC(fid, name)
+H5SparseMatrixCSC(fid::HDF5.H5DataStore, name::AbstractString, ::Colon, ::Colon) = H5SparseMatrixCSC(fid, name)
 
 Base.show(io::IOContext, A::H5SparseMatrixCSC) = show(io.io, A)
 
@@ -210,23 +211,23 @@ function SparseArrays.sparse(A::H5SparseMatrixCSC{Tv,Ti})::SparseMatrixCSC{Tv,Ti
     SparseMatrixCSC{Tv,Ti}(m, n, colptr, rowval, nzval)
 end
 
-function h5size(fid::HDF5.File, name::AbstractString)
+function h5size(fid::HDF5.H5DataStore, name::AbstractString)
     g = fid[name]
     g["m"][], g["n"][]
 end
 
 """
-    h5writecsc(fid::HDF5.File, name::AbstractString, B::SparseMatrixCSC; kwargs...) 
+    h5writecsc(fid::HDF5.H5DataStore, name::AbstractString, B::SparseMatrixCSC; kwargs...) 
 
 Write `B` to `fid[name]`, overwriting any existing dataset with name `name` if `overwrite=true`. 
 This is a low-level routine without error checking; user should typically use `H5SparseMatrixCSC`
 instead.
 """
-function h5writecsc(fid::HDF5.File, name::AbstractString, B::SparseMatrixCSC; kwargs...) 
+function h5writecsc(fid::HDF5.H5DataStore, name::AbstractString, B::SparseMatrixCSC; kwargs...) 
     m, n = size(B)
     h5writecsc(fid, name, m, n, SparseArrays.getcolptr(B), rowvals(B), nonzeros(B); kwargs...)
 end
-function h5writecsc(fid::HDF5.File, name::AbstractString, m::Integer, n::Integer, colptr::AbstractVector{<:Integer}, rowval::AbstractVector{<:Integer}, nzval::AbstractVector; overwrite=false, chunk=nothing, blosc=5, kwargs...)
+function h5writecsc(fid::HDF5.H5DataStore, name::AbstractString, m::Integer, n::Integer, colptr::AbstractVector{<:Integer}, rowval::AbstractVector{<:Integer}, nzval::AbstractVector; overwrite=false, chunk=nothing, blosc=5, kwargs...)
     if name in keys(fid)
         if overwrite
             delete_object(fid, name)
@@ -265,16 +266,16 @@ function h5writecsc(fid::HDF5.File, name::AbstractString, m::Integer, n::Integer
 end
 
 """
-    h5appendcsc(fid::HDF5.File, name::AbstractString, B::SparseMatrixCSC)
+    h5appendcsc(fid::HDF5.H5DataStore, name::AbstractString, B::SparseMatrixCSC)
 
 Append `B` to the right of the `SparseMatrixCSC` stored in `fid[name]`. This is a low-level routine
 without error checking; user should typically use `append` instead.
 """
-function h5appendcsc(fid::HDF5.File, name::AbstractString, B::SparseMatrixCSC)
+function h5appendcsc(fid::HDF5.H5DataStore, name::AbstractString, B::SparseMatrixCSC)
     m, n = size(B)
     h5appendcsc(fid, name, m, n, SparseArrays.getcolptr(B), rowvals(B), nonzeros(B))
 end
-function h5appendcsc(fid::HDF5.File, name::AbstractString, m::Integer, n::Integer, colptr::AbstractVector{<:Integer}, rowval::AbstractVector{<:Integer}, nzval::AbstractVector)
+function h5appendcsc(fid::HDF5.H5DataStore, name::AbstractString, m::Integer, n::Integer, colptr::AbstractVector{<:Integer}, rowval::AbstractVector{<:Integer}, nzval::AbstractVector)
     g = fid[name]
     # colptr
     i = size(g["colptr"], 1)
@@ -303,7 +304,7 @@ end
 
 Return `true` if `fid[name]` is a valid `H5SparseMatrixCSC` dataset, and `false` otherwise.
 """
-function h5isvalidcsc(fid::HDF5.File, name::AbstractString)
+function h5isvalidcsc(fid::HDF5.H5DataStore, name::AbstractString)
     name in keys(fid) || return false
     g = fid[name]
     g isa HDF5.Group || return false
