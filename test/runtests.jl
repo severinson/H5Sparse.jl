@@ -71,4 +71,17 @@ using HDF5, SparseArrays
     @test !H5Sparse.h5isvalidcsc(fid, name)
     fid["foo"] = 10
     @test !H5Sparse.h5isvalidcsc(fid, "foo")
+
+    # saving a matrix with no stored entries
+    B = spzeros(10, 10)
+    filename = tempname()    
+    A = H5SparseMatrixCSC(filename, name, B)
+    @test sparse(A) ≈ B
+
+    # # saving a matrix of dimension 0 x 0
+    # (not implemented)
+    # B = spzeros(0, 0)
+    # filename = tempname()    
+    # A = H5SparseMatrixCSC(filename, name, B)
+    # @test sparse(A) ≈ B
 end
