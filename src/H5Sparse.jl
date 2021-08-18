@@ -227,7 +227,7 @@ function h5writecsc(fid::HDF5.H5DataStore, name::AbstractString, B::SparseMatrix
     m, n = size(B)
     h5writecsc(fid, name, m, n, SparseArrays.getcolptr(B), rowvals(B), nonzeros(B); kwargs...)
 end
-function h5writecsc(fid::HDF5.H5DataStore, name::AbstractString, m::Integer, n::Integer, colptr::AbstractVector{<:Integer}, rowval::AbstractVector{<:Integer}, nzval::AbstractVector; overwrite=false, chunk=nothing, blosc=5, kwargs...)
+function h5writecsc(fid::HDF5.H5DataStore, name::AbstractString, m::Integer, n::Integer, colptr::AbstractVector{<:Integer}, rowval::AbstractVector{<:Integer}, nzval::AbstractVector; overwrite=false, colptr_chunk=length(colptr) > 0 ? HDF5.heuristic_chunk(colptr) : [1], val_chunk=length(rowval) > 0 ? HDF5.heuristic_chunk(rowval) : [1], blosc=5, kwargs...)
     if name in keys(fid)
         if overwrite
             delete_object(fid, name)
@@ -237,12 +237,12 @@ function h5writecsc(fid::HDF5.H5DataStore, name::AbstractString, m::Integer, n::
     end
     g = create_group(fid, name)
     g["m"] = m
-    g["n"] = n    
+    g["n"] = n
     create_dataset(
         g, "colptr", 
         eltype(colptr), 
         ((length(colptr),), (-1,)),
-        chunk=isnothing(chunk) ? HDF5.heuristic_chunk(colptr) : chunk,
+        chunk=colptr_chunk,
         blosc=blosc,
         kwargs...,
     )[1:length(colptr)] = colptr
@@ -250,7 +250,7 @@ function h5writecsc(fid::HDF5.H5DataStore, name::AbstractString, m::Integer, n::
         g, "rowval", 
         eltype(rowval), 
         ((length(rowval),), (-1,)),
-        chunk=isnothing(chunk) ? HDF5.heuristic_chunk(rowval) : chunk,
+        chunk=val_chunk,
         blosc=blosc,
         kwargs...,
     )[1:length(rowval)] = rowval    
@@ -258,7 +258,7 @@ function h5writecsc(fid::HDF5.H5DataStore, name::AbstractString, m::Integer, n::
         g, "nzval",
         eltype(nzval), 
         ((length(nzval),), (-1,)),
-        chunk=isnothing(chunk) ? HDF5.heuristic_chunk(nzval) : chunk,
+        chunk=val_chunk,
         blosc=blosc,
         kwargs...,
     )[1:length(nzval)] = nzval
