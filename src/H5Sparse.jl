@@ -202,11 +202,11 @@ function SparseArrays.sparse(A::H5SparseMatrixCSC{Tv,Ti})::SparseMatrixCSC{Tv,Ti
         error("not implemented")
     end
     g = A.fid[A.name]
-    colptr = g["colptr"][first(A.cols):(last(A.cols)+1)]
+    colptr::Vector{Ti} = g["colptr"][first(A.cols):(last(A.cols)+1)]
     i = colptr[1]
     j = colptr[end] - 1
-    rowval = g["rowval"][i:j]
-    nzval = g["nzval"][i:j]
+    rowval::Vector{Ti} = j >= i ? g["rowval"][i:j] : Vector{Ti}()
+    nzval::Vector{Tv} = j >= i ? g["nzval"][i:j] : Vector{Tv}()
     colptr .-= i-1
     SparseMatrixCSC{Tv,Ti}(m, n, colptr, rowval, nzval)
 end
