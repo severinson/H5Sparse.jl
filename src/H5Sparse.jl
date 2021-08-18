@@ -67,9 +67,9 @@ struct H5SparseMatrixCSC{Tv, Ti<:Integer, Td<:HDF5.H5DataStore} <: SparseArrays.
         "colptr" in keys(g) || throw(ArgumentError("colptr is not in $g"))
         "rowval" in keys(g) || throw(ArgumentError("rowval is not in $g"))
         "nzval" in keys(g) || throw(ArgumentError("nzval is not in $g"))
-        length(size(g["colptr"])) == 1 || return false
-        length(size(g["rowval"])) == 1 || return false
-        length(size(g["nzval"])) == 1 || return false        
+        length(size(g["colptr"])) == 1 || throw(ArgumentError("expected colptr to have 1 dimension, but got $(size(g["colptr"]))"))
+        length(size(g["rowval"])) == 1 || throw(ArgumentError("expected rowval to have 1 dimension, but got $(size(g["rowval"]))"))
+        length(size(g["nzval"])) == 1 || throw(ArgumentError("expected nzval to have 1 dimension, but got $(size(g["nzval"]))"))
         eltype(g["colptr"]) == eltype(g["rowval"]) || throw(ArgumentError("colptr has eltype $(g["colptr"])), but rowval has eltype $(g["rowval"]))"))
         m, n = g["m"][], g["n"][]
         (iszero(m) && first(rows) == 0) || 0 < first(rows) || throw(ArgumentError("first row is $(first(rows)), but m is $m"))
