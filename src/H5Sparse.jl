@@ -80,16 +80,16 @@ struct H5SparseMatrixCSC{Tv, Ti<:Integer, Td<:HDF5.H5DataStore} <: SparseArrays.
         length(size(g["nzval"])) == 1 || throw(ArgumentError("expected nzval to have 1 dimension, but got $(size(g["nzval"]))"))
         eltype(g["colptr"]) == eltype(g["rowval"]) || throw(ArgumentError("colptr has eltype $(g["colptr"])), but rowval has eltype $(g["rowval"]))"))
         m, n = g["m"][], g["n"][]
-        (iszero(m) && first(rows) == 0) || 0 < first(rows) || throw(ArgumentError("first row is $(first(rows)), but m is $m"))
-        (iszero(m) && last(rows) == 0)  || 0 < last(rows) || throw(ArgumentError("last row is $(last(rows)), but m is $m"))
-        first(rows) <= m || throw(ArgumentError("first row is $(first(rows)), but m is $m"))
-        last(rows) <= m || throw(ArgumentError("last row is $(last(rows)), but m is $m"))
-        first(rows) <= last(rows) || throw(ArgumentError("first row is $(first(rows)), but last row is $(last(rows))"))
-        (iszero(n) && first(cols) == 0) || 0 < first(cols) || throw(ArgumentError("first column is $(first(cols)), but n is $n"))
-        (iszero(n) && last(cols) == 0)  || 0 < last(cols) || throw(ArgumentError("last column is $(last(cols)), but n is $n"))
-        first(cols) <= n || throw(ArgumentError("first column is $(first(cols)), but n is $n"))
-        last(cols) <= n || throw(ArgumentError("last column is $(last(cols)), but n is $n"))
-        first(cols) <= last(cols) || throw(ArgumentError("first columns is $(first(cols)), but last column is $(last(cols))"))
+        if m==0
+            rows==1:0 || throw(ArgumentError("0-row matrix must have rows==1:0"))
+        else
+            0 < first(rows) <= last(rows) <= m || throw(ArgumentError("rows is $rows, not in 1:$m"))
+        end
+        if n==0
+            cols==1:0 || throw(ArgumentError("0-column matrix must have cols==1:0"))
+        else
+            0 < first(cols) <= last(cols) <= n || throw(ArgumentError("cols is $cols, not in 1:$n"))
+        end
         new{eltype(g["nzval"]),eltype(g["rowval"]),typeof(fid)}(fid, String(name), rows, cols)
     end
 end
@@ -98,8 +98,8 @@ function H5SparseMatrixCSC(fid::HDF5.H5DataStore, name::AbstractString, B::Spars
     h5writecsc(fid, name, B; kwargs...)
     H5SparseMatrixCSC(
         fid, name,
-        size(B, 1) > 0 ? (1:size(B, 1)) : (0:0), 
-        size(B, 2) > 0 ? (1:size(B, 2)) : (0:0),
+        size(B, 1) > 0 ? (1:size(B, 1)) : (1:0), 
+        size(B, 2) > 0 ? (1:size(B, 2)) : (1:0),
         )
 end
 function H5SparseMatrixCSC(fid::HDF5.H5DataStore, name::AbstractString)
