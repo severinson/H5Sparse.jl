@@ -4,11 +4,11 @@ authors = ["Albin Severinson <albin@severinson.org> and contributors"]
 version = "0.3.0"
 
 [deps]
+H5Zblosc = "c8ec2601-a99c-407f-b158-e79c03c2f5f7"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
-HDF5 = "0.15"
 julia = "1"
 
 [extras]

@@ -1,6 +1,6 @@
 using H5Sparse
 using Test
-using HDF5, SparseArrays
+using HDF5, H5Zblosc, SparseArrays
 
 @testset "H5Sparse.jl" begin
     B = sprand(10, 10, 0.5)
