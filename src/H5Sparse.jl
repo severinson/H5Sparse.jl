@@ -4,7 +4,7 @@ Support for out-of-core sparse arrays backed by a HDF5 file stored on disk. Prov
 """
 module H5Sparse
 
-using HDF5, SparseArrays
+using HDF5, H5Zblosc, SparseArrays
 
 export H5SparseMatrixCSC
 
@@ -66,7 +66,7 @@ struct H5SparseMatrixCSC{Tv, Ti<:Integer, Td<:HDF5.H5DataStore} <: SparseArrays.
     name::String            # Dataset name, i.e., data is stored in fid[name]
     rows::UnitRange{Int}    # Subset of rows stored in fid[name] accessible via this instance
     cols::UnitRange{Int}    # Subset of columns stored in fid[name] accessible via this instance
-    function H5SparseMatrixCSC(fid::HDF5.H5DataStore, name::AbstractString, rows::UnitRange{Int}, cols::UnitRange{Int}) where {Tv,Ti<:Integer}
+    function H5SparseMatrixCSC(fid::HDF5.H5DataStore, name::AbstractString, rows::UnitRange{Int}, cols::UnitRange{Int}) # where {Tv,Ti<:Integer}
         name in keys(fid) || throw(ArgumentError("$name is not in $fid"))
         g = fid[name]
         g isa HDF5.Group || throw(ArgumentError("fid[name] is $g, but must be a HDF5.Group"))
